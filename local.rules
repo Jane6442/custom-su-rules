@@ -1,198 +1,73 @@
-# ========================================
-# Custom Behavioral Detection Rules
-# For network anomaly monitoring
-# Designed for research and traffic analysis
-# ========================================
+# ============================================
+# PiRogue - Détections exfiltration & C2 TLS
+# ============================================
+# Contenu :
+#   [A] Whitelist messageries par SNI (noalert)
+#   [B] Uploads > 5 Mo (tous protocoles)
+#   [C] C2 récurrent TLS (>5 connexions / 30 min) hors whitelist
+#
+# SIDs réservés : 800000–800199
 
+# ----------------------------
+# [A] WHITELIST TLS (par SNI)
+# ----------------------------
+# On marque les flux TLS connus (Signal/WhatsApp/Instagram/Facebook) pour exclusion.
+# Ces règles ne génèrent PAS d'alertes.
 
-# 1. Regular outbound connections at fixed intervals (~270s)
-# Often indicates automated beaconing behavior
-alert tcp any any -> any any (msg:"Network: Regular interval connections detected (possible persistent agent)"; \
-    detection_filter: track by_dst, count 5, seconds 300; \
-    metadata:confidence high, category beaconing; \
-    classtype: trojan-activity; \
-    sid: 1002001; \
-    rev: 2;)
+alert tls any any -> any any (msg:"WL SNI Signal"; tls.sni; pcre:"/(\.|^)signal\.org$/i"; flowbits:set,wl_msg; sid:800000; rev:1; noalert;)
+alert tls any any -> any any (msg:"WL SNI WhatsApp"; tls.sni; pcre:"/(\.|^)whatsapp\.(net|com)$/i"; flowbits:set,wl_msg; sid:800001; rev:1; noalert;)
+alert tls any any -> any any (msg:"WL SNI Instagram"; tls.sni; pcre:"/(\.|^)instagram\.com$/i"; flowbits:set,wl_msg; sid:800002; rev:1; noalert;)
+alert tls any any -> any any (msg:"WL SNI CDN Instagram"; tls.sni; pcre:"/(\.|^)cdninstagram\.com$/i"; flowbits:set,wl_msg; sid:800003; rev:1; noalert;)
+alert tls any any -> any any (msg:"WL SNI Facebook"; tls.sni; pcre:"/(\.|^)facebook\.com$/i"; flowbits:set,wl_msg; sid:800004; rev:1; noalert;)
+alert tls any any -> any any (msg:"WL SNI Meta CDN"; tls.sni; pcre:"/(\.|^)fbcdn\.net$/i"; flowbits:set,wl_msg; sid:800005; rev:1; noalert;)
 
+# --------------------------------------------
+# [B] EXFILTRATION : Upload total > 5 Mo
+# --------------------------------------------
+# [Counter] on cumule les octets envoyés vers le serveur pour chaque flux.
+alert ip any any -> any any (
+    msg:"[Counter] Upload bytes";
+    flow:to_server,established;
+    flowint:upload_bytes,+,dsize;
+    sid:800010; rev:1; noalert;
+)
 
-# 2. HTTP requests to cloud hosting platforms with API-like paths
-# Common pattern in remote management or data sync tools
-alert http any any -> any any (msg:"Network: API-style requests to cloud hosting platforms"; \
-    http.host; pcre:"/(.*\.(firebaseapp\.com|vercel\.app|pages\.dev|github\.io|gitlab\.io))$/i"; \
-    http.uri; pcre:"/(\/(api|v[0-9]+|sync|upload|data|backup|report))[\/?]?/i"; \
-    metadata:confidence medium, category cloud-exfil; \
-    classtype: suspicious-traffic; \
-    sid: 1002002; \
-    rev: 2;)
+# [Alerte] seuil dépassé : 5 Mo (5 * 1024 * 1024)
+alert ip any any -> any any (
+    msg:"EXFILTRATION possible : UPLOAD total > 5MB";
+    flow:to_server,established;
+    flowint:upload_bytes,>,5242880;
+    flowbits:isnotset,upload_alerted;
+    flowbits:set,upload_alerted;
+    classtype:data-loss;
+    sid:800011; rev:1;
+)
 
+# ----------------------------------------------------------------------
+# [C] C2 RÉCURRENT (TLS) : > 5 connexions vers la même IP en 30 minutes
+# ----------------------------------------------------------------------
+# Idée : si le poste contacte souvent la même IP en TLS, hors services whitelistes,
+# on suspecte un beaconing C2. On exclut les flux où le SNI match la whitelist.
+#
+# NB : on se base sur l'IP de destination (pas le SNI) pour agréger les occurrences.
+# Avantage : fonctionne même si SNI absent. Inconvénient : SNI différent sur même IP
+# est agrégé (acceptable pour une heuristique).
+#
+# On utilise un contenu négatif sur tls.sni pour exclure explicitement les domaines
+# whitelistes (au cas où 'wl_msg' n'est pas posé pour une raison quelconque).
 
-# 3. Excessively long DNS queries (>200 characters)
-# May indicate data encoding or tunneling techniques
-alert dns any any -> any any (msg:"Network: Long DNS queries detected (>200 chars)"; \
-    dns.query; isdataat:200,relative; \
-    detection_filter: track by_src, count 3, seconds 60; \
-    metadata:confidence high, category dns-anomaly; \
-    classtype: data-theft; \
-    sid: 1002003; \
-    rev: 2;)
-
-
-# 4. Frequent DNS TXT record queries
-# Rare in normal traffic, often used for data transfer
-alert dns any any -> any any (msg:"Network: High frequency of DNS TXT queries"; \
-    dns.rrname; content:"TXT"; \
-    detection_filter: track by_src, count 4, seconds 30; \
-    metadata:confidence medium, category dns-exfil; \
-    classtype: data-theft; \
-    sid: 1002004; \
-    rev: 2;)
-
-
-# 5. Frequent DNS NULL record queries
-# Uncommon in standard applications
-alert dns any any -> any any (msg:"Network: High frequency of DNS NULL queries"; \
-    dns.rrtype; byte_test:1,=,10,0; \
-    detection_filter: track by_src, count 4, seconds 30; \
-    metadata:confidence medium, category dns-exfil; \
-    classtype: data-theft; \
-    sid: 1002005; \
-    rev: 2;)
-
-
-# 6. TLS certificate with short validity (<7 days) or generic subject
-# May indicate self-signed or dynamically generated certs
-alert tls any any -> any any (msg:"Network: Short-lived or generic TLS certificate observed"; \
-    tls.cert_subject; pcre:"/(CN=Android|CN=Unknown|O=Unknown|C=XX)/i"; \
-    metadata:confidence medium, category tls-anomaly; \
-    classtype: suspicious-traffic; \
-    sid: 1002006; \
-    rev: 2;)
-
-
-# 7. Large outbound data transfer (>5MB in one flow)
-# May indicate bulk data transmission
-alert tcp any any -> any any (msg:"Network: Large outbound data transfer detected (>5MB)"; \
-    byte_test:4,>,5242880,0,relative; \
-    flow:established; \
-    metadata:confidence medium, category data-transfer; \
-    classtype: data-theft; \
-    sid: 1002007; \
-    rev: 2;)
-
-
-# 9. Frequent STUN/TURN UDP traffic on port 3478
-# May indicate active network probing or location services
-alert udp any any -> any 3478 (msg:"Network: Frequent STUN/TURN outbound traffic"; \
-    content:"|00 01|"; depth:2; offset:0; \
-    content:"|21 12 A4 42|"; distance:4; within:4; \
-    detection_filter: track by_src, count 10, seconds 60; \
-    metadata:confidence medium, category webrtc; \
-    classtype: protocol-command-decode; \
-    sid: 1002009; \
-    rev: 2;)
-
-
-# 10. Random-looking long subdomains (DGA-like pattern)
-# May indicate algorithmically generated domains
-alert dns any any -> any any (msg:"Network: Long random-looking subdomains detected"; \
-    dns.query; pcre:"/^([a-z0-9]{12,}\.)/i"; \
-    detection_filter: track by_dst, count 5, seconds 300; \
-    metadata:confidence medium, category dga; \
-    classtype: trojan-activity; \
-    sid: 1002010; \
-    rev: 2;)
-
-
-# ========================================
-# TLS/Encrypted Traffic Analysis Rules
-# Same behavioral detection applied to TLS traffic
-# ========================================
-
-
-# 11. Regular TLS connections at fixed intervals
-# Behavioral equivalent of rule #1 for TLS traffic
-alert tcp any any -> any 443 (msg:"TLS: Regular interval HTTPS connections detected"; \
-    flow:established; \
-    detection_filter: track by_dst, count 5, seconds 300; \
-    metadata:confidence high, category beaconing; \
-    classtype: trojan-activity; \
-    sid: 1002011; \
-    rev: 1;)
-
-
-# 12. API-like patterns in TLS SNI domains
-# Behavioral equivalent of rule #2 for TLS traffic
-alert tls any any -> any any (msg:"TLS: API-style domains in SNI"; \
-    tls.sni; pcre:"/(api|v[0-9]+|sync|upload|data|backup|report).*\.(firebaseapp\.com|vercel\.app|pages\.dev|github\.io|gitlab\.io)$/i"; \
-    metadata:confidence medium, category cloud-exfil; \
-    classtype: suspicious-traffic; \
-    sid: 1002012; \
-    rev: 1;)
-
-
-# 13. Large data transfers over TLS
-# Behavioral equivalent of rule #7 for TLS traffic
-alert tcp any any -> any 443 (msg:"TLS: Large HTTPS data transfer detected (>5MB)"; \
-    flow:established; \
-    byte_test:4,>,5242880,0,flow.bytes_toclient; \
-    metadata:confidence medium, category data-transfer; \
-    classtype: data-theft; \
-    sid: 1002013; \
-    rev: 1;)
-
-
-# 14. Asymmetric TLS data flow
-# Behavioral equivalent focusing on upload/download patterns
-alert tcp any any -> any 443 (msg:"TLS: Asymmetric HTTPS data flow detected"; \
-    flow:established; \
-    byte_test:4,>,1048576,0,flow.bytes_toclient; \
-    byte_test:4,<,10240,0,flow.bytes_toserver; \
-    metadata:confidence high, category data-exfil; \
-    classtype: data-theft; \
-    sid: 1002014; \
-    rev: 1;)
-
-
-# 15. Frequent short-lived TLS connections
-# Behavioral equivalent of beaconing detection for TLS
-alert tcp any any -> any 443 (msg:"TLS: Frequent short-lived HTTPS connections"; \
-    flow:established; \
-    byte_test:4,<,1024,0,flow.bytes_toclient; \
-    detection_filter: track by_src, count 15, seconds 60; \
-    metadata:confidence medium, category beaconing; \
-    classtype: trojan-activity; \
-    sid: 1002015; \
-    rev: 1;)
-
-
-# 16. Multiple TLS connections with different SNI domains
-# Behavioral equivalent of domain scanning
-alert tls any any -> any any (msg:"TLS: Multiple different SNI domains from same source"; \
-    detection_filter: track by_src, count 8, seconds 120; \
-    metadata:confidence medium, category recon; \
-    classtype: attempted-recon; \
-    sid: 1002016; \
-    rev: 1;)
-
-
-# 17. TLS on non-standard ports with behavioral patterns
-# Behavioral equivalent for port anomaly detection
-alert tcp any any -> any !443 (msg:"TLS: Suspicious behavioral pattern on non-standard TLS port"; \
-    flow:established; \
-    byte_test:4,>,1048576,0,flow.bytes_toclient; \
-    detection_filter: track by_src, count 3, seconds 300; \
-    metadata:confidence medium, category port-anomaly; \
-    classtype: suspicious-traffic; \
-    sid: 1002017; \
-    rev: 1;)
-
-
-# 18. Random-looking SNI domains (DGA-like)
-# Behavioral equivalent of DNS DGA detection for TLS
-alert tls any any -> any any (msg:"TLS: Random-looking SNI domains detected (possible DGA)"; \
-    tls.sni; pcre:"/^([a-z0-9]{12,})\.[a-z]{2,}$/i"; \
-    detection_filter: track by_dst, count 5, seconds 300; \
-    metadata:confidence medium, category dga; \
-    classtype: trojan-activity; \
-    sid: 1002018; \
-    rev: 1;)
+alert tls any any -> any any (
+    msg:"C2 potentiel : connexions TLS récurrentes vers la même IP (>5 / 30min)";
+    flow:to_server,established;
+    flowbits:isnotset,wl_msg;
+    tls.sni; content:!"signal.org"; nocase;
+    tls.sni; content:!"whatsapp.net"; nocase;
+    tls.sni; content:!"whatsapp.com"; nocase;
+    tls.sni; content:!"instagram.com"; nocase;
+    tls.sni; content:!"cdninstagram.com"; nocase;
+    tls.sni; content:!"facebook.com"; nocase;
+    tls.sni; content:!"fbcdn.net"; nocase;
+    threshold:type both, track by_dst, count 6, seconds 1800;
+    classtype:trojan-activity;
+    sid:800020; rev:1;
+)
