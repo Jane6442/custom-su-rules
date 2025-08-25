@@ -24,23 +24,27 @@
 # --------------------------------------------
 # [B] EXFILTRATION : Upload total > 5 Mo
 # --------------------------------------------
-# [Counter] on cumule les octets envoyés vers le serveur pour chaque flux.
-alert ip any any -> any any (
-    msg:"[Counter] Upload bytes";
-    flow:to_server,established;
-    flowint:upload_bytes,+,dsize;
-    sid:800010; rev:1; noalert;
+# Upload important sur un flux TCP
+alert tcp any any -> any any (
+    msg:"EXFILTRATION: Large data upload detected (>5MB)";
+    flow:established,to_server;
+    byte_test:4,>,5242880,0,flow.bytes_toserver;
+    metadata:confidence high, category data-exfil;
+    classtype:data-loss;
+    sid:800012;
+    rev:1;
 )
 
-# [Alerte] seuil dépassé : 5 Mo (5 * 1024 * 1024)
-alert ip any any -> any any (
-    msg:"EXFILTRATION possible : UPLOAD total > 5MB";
-    flow:to_server,established;
-    flowint:upload_bytes,>,5242880;
-    flowbits:isnotset,upload_alerted;
-    flowbits:set,upload_alerted;
-    classtype:data-loss;
-    sid:800011; rev:1;
+# Upload modéré mais fréquent (possible exfiltration progressive)
+alert tcp any any -> any any (
+    msg:"EXFILTRATION: Frequent moderate uploads";
+    flow:established,to_server;
+    byte_test:4,>,1048576,0,flow.bytes_toserver;  # > 1MB
+    detection_filter:track by_src,count 5,seconds 300;  # 5 fois en 5 minutes
+    metadata:confidence medium, category data-exfil;
+    classtype:suspicious-traffic;
+    sid:800013;
+    rev:1;
 )
 
 # ----------------------------------------------------------------------
