@@ -40,7 +40,7 @@ alert dns any any -> any any (msg:"Network: Long DNS queries detected (>200 char
 # 4. Frequent DNS TXT record queries
 # Rare in normal traffic, often used for data transfer
 alert dns any any -> any any (msg:"Network: High frequency of DNS TXT queries"; \
-    dns.rtype; content:"TXT"; \
+    dns.rrname; content:"TXT"; \
     detection_filter: track by_src, count 4, seconds 30; \
     metadata:confidence medium, category dns-exfil; \
     classtype: data-theft; \
@@ -51,7 +51,7 @@ alert dns any any -> any any (msg:"Network: High frequency of DNS TXT queries"; 
 # 5. Frequent DNS NULL record queries
 # Uncommon in standard applications
 alert dns any any -> any any (msg:"Network: High frequency of DNS NULL queries"; \
-    dns.rtype; byte_test:1,=,10,0; \
+    dns.rrtype; byte_test:1,=,10,0; \
     detection_filter: track by_src, count 4, seconds 30; \
     metadata:confidence medium, category dns-exfil; \
     classtype: data-theft; \
@@ -64,7 +64,7 @@ alert dns any any -> any any (msg:"Network: High frequency of DNS NULL queries";
 alert tls any any -> any any (msg:"Network: Short-lived or generic TLS certificate observed"; \
     tls.cert_subject; pcre:"/(CN=Android|CN=Unknown|O=Unknown|C=XX)/i"; \
     metadata:confidence medium, category tls-anomaly; \
-    classtype: suspicious-certificate; \
+    classtype: suspicious-traffic; \
     sid: 1002006; \
     rev: 2;)
 
@@ -87,7 +87,7 @@ alert udp any any -> any 3478 (msg:"Network: Frequent STUN/TURN outbound traffic
     content:"|21 12 A4 42|"; distance:4; within:4; \
     detection_filter: track by_src, count 10, seconds 60; \
     metadata:confidence medium, category webrtc; \
-    classtype: information-disclosure; \
+    classtype: protocol-command-decode; \
     sid: 1002009; \
     rev: 2;)
 
@@ -132,7 +132,7 @@ alert tls any any -> any any (msg:"TLS: API-style domains in SNI"; \
 
 # 13. Large data transfers over TLS
 # Behavioral equivalent of rule #7 for TLS traffic
-alert tls any any -> any any (msg:"TLS: Large HTTPS data transfer detected (>5MB)"; \
+alert tcp any any -> any 443 (msg:"TLS: Large HTTPS data transfer detected (>5MB)"; \
     flow:established; \
     byte_test:4,>,5242880,0,flow.bytes_toclient; \
     metadata:confidence medium, category data-transfer; \
@@ -143,7 +143,7 @@ alert tls any any -> any any (msg:"TLS: Large HTTPS data transfer detected (>5MB
 
 # 14. Asymmetric TLS data flow
 # Behavioral equivalent focusing on upload/download patterns
-alert tls any any -> any any (msg:"TLS: Asymmetric HTTPS data flow detected"; \
+alert tcp any any -> any 443 (msg:"TLS: Asymmetric HTTPS data flow detected"; \
     flow:established; \
     byte_test:4,>,1048576,0,flow.bytes_toclient; \
     byte_test:4,<,10240,0,flow.bytes_toserver; \
@@ -155,7 +155,7 @@ alert tls any any -> any any (msg:"TLS: Asymmetric HTTPS data flow detected"; \
 
 # 15. Frequent short-lived TLS connections
 # Behavioral equivalent of beaconing detection for TLS
-alert tls any any -> any any (msg:"TLS: Frequent short-lived HTTPS connections"; \
+alert tcp any any -> any 443 (msg:"TLS: Frequent short-lived HTTPS connections"; \
     flow:established; \
     byte_test:4,<,1024,0,flow.bytes_toclient; \
     detection_filter: track by_src, count 15, seconds 60; \
@@ -164,12 +164,13 @@ alert tls any any -> any any (msg:"TLS: Frequent short-lived HTTPS connections";
     sid: 1002015; \
     rev: 1;)
 
+
 # 16. Multiple TLS connections with different SNI domains
 # Behavioral equivalent of domain scanning
 alert tls any any -> any any (msg:"TLS: Multiple different SNI domains from same source"; \
     detection_filter: track by_src, count 8, seconds 120; \
     metadata:confidence medium, category recon; \
-    classtype: network-scan; \
+    classtype: attempted-recon; \
     sid: 1002016; \
     rev: 1;)
 
