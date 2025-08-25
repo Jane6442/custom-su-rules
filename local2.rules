@@ -14,12 +14,12 @@
 # On marque les flux TLS connus (Signal/WhatsApp/Instagram/Facebook) pour exclusion.
 # Ces règles ne génèrent PAS d'alertes.
 
-alert tls any any -> any any (msg:"WL SNI Signal"; tls.sni; pcre:"/(\.|^)signal\.org$/i"; flowbits:set,wl_msg; sid:800000; rev:1; noalert;)
-alert tls any any -> any any (msg:"WL SNI WhatsApp"; tls.sni; pcre:"/(\.|^)whatsapp\.(net|com)$/i"; flowbits:set,wl_msg; sid:800001; rev:1; noalert;)
-alert tls any any -> any any (msg:"WL SNI Instagram"; tls.sni; pcre:"/(\.|^)instagram\.com$/i"; flowbits:set,wl_msg; sid:800002; rev:1; noalert;)
-alert tls any any -> any any (msg:"WL SNI CDN Instagram"; tls.sni; pcre:"/(\.|^)cdninstagram\.com$/i"; flowbits:set,wl_msg; sid:800003; rev:1; noalert;)
-alert tls any any -> any any (msg:"WL SNI Facebook"; tls.sni; pcre:"/(\.|^)facebook\.com$/i"; flowbits:set,wl_msg; sid:800004; rev:1; noalert;)
-alert tls any any -> any any (msg:"WL SNI Meta CDN"; tls.sni; pcre:"/(\.|^)fbcdn\.net$/i"; flowbits:set,wl_msg; sid:800005; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI Signal"; tls.sni; pcre:"/(\.|^)signal\.org$/i"; flowbits:set,wl_msg; sid:800000; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI WhatsApp"; tls.sni; pcre:"/(\.|^)whatsapp\.(net|com)$/i"; flowbits:set,wl_msg; sid:800001; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI Instagram"; tls.sni; pcre:"/(\.|^)instagram\.com$/i"; flowbits:set,wl_msg; sid:800002; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI CDN Instagram"; tls.sni; pcre:"/(\.|^)cdninstagram\.com$/i"; flowbits:set,wl_msg; sid:800003; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI Facebook"; tls.sni; pcre:"/(\.|^)facebook\.com$/i"; flowbits:set,wl_msg; sid:800004; rev:1; noalert;)
+#alert tls any any -> any any (msg:"WL SNI Meta CDN"; tls.sni; pcre:"/(\.|^)fbcdn\.net$/i"; flowbits:set,wl_msg; sid:800005; rev:1; noalert;)
 
 # --------------------------------------------
 # [B] EXFILTRATION : Upload total > 5 Mo
