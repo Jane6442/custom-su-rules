@@ -132,7 +132,7 @@ alert tls any any -> any any (msg:"TLS: API-style domains in SNI"; \
 
 # 13. Large data transfers over TLS
 # Behavioral equivalent of rule #7 for TLS traffic
-alert tcp any any -> any 443 (msg:"TLS: Large HTTPS data transfer detected (>5MB)"; \
+alert tls any any -> any any (msg:"TLS: Large HTTPS data transfer detected (>5MB)"; \
     flow:established; \
     byte_test:4,>,5242880,0,flow.bytes_toclient; \
     metadata:confidence medium, category data-transfer; \
@@ -143,7 +143,7 @@ alert tcp any any -> any 443 (msg:"TLS: Large HTTPS data transfer detected (>5MB
 
 # 14. Asymmetric TLS data flow
 # Behavioral equivalent focusing on upload/download patterns
-alert tcp any any -> any 443 (msg:"TLS: Asymmetric HTTPS data flow detected"; \
+alert tls any any -> any any (msg:"TLS: Asymmetric HTTPS data flow detected"; \
     flow:established; \
     byte_test:4,>,1048576,0,flow.bytes_toclient; \
     byte_test:4,<,10240,0,flow.bytes_toserver; \
@@ -155,7 +155,7 @@ alert tcp any any -> any 443 (msg:"TLS: Asymmetric HTTPS data flow detected"; \
 
 # 15. Frequent short-lived TLS connections
 # Behavioral equivalent of beaconing detection for TLS
-alert tcp any any -> any 443 (msg:"TLS: Frequent short-lived HTTPS connections"; \
+alert tls any any -> any any (msg:"TLS: Frequent short-lived HTTPS connections"; \
     flow:established; \
     byte_test:4,<,1024,0,flow.bytes_toclient; \
     detection_filter: track by_src, count 15, seconds 60; \
@@ -163,7 +163,6 @@ alert tcp any any -> any 443 (msg:"TLS: Frequent short-lived HTTPS connections";
     classtype: trojan-activity; \
     sid: 1002015; \
     rev: 1;)
-
 
 # 16. Multiple TLS connections with different SNI domains
 # Behavioral equivalent of domain scanning
